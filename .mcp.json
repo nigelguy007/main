@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "notebooklm": {
+      "command": "node",
+      "args": ["${NOTEBOOKLM_MCP_PATH}/dist/index.js"],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  }
+}
