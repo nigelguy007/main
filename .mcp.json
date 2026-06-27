@@ -1,11 +1,12 @@
 {
   "mcpServers": {
     "notebooklm": {
-      "command": "node",
-      "args": ["${NOTEBOOKLM_MCP_PATH}/dist/index.js"],
-      "env": {
-        "NODE_ENV": "production"
-      }
+      "command": "uvx",
+      "args": [
+        "--from",
+        "notebooklm-py[mcp] @ git+https://github.com/teng-lin/notebooklm-py",
+        "notebooklm-mcp"
+      ]
     }
   }
 }

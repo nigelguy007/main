@@ -1,91 +1,90 @@
-# Using NotebookLM with Claude
+# Using NotebookLM with Claude (verified working)
 
-Two ways are set up here:
+NotebookLM has **no official Google API**. This connects Claude to your
+notebooks using [`teng-lin/notebooklm-py`](https://github.com/teng-lin/notebooklm-py),
+an unofficial Python tool that signs into NotebookLM as you (browser
+automation) and exposes it to Claude over MCP.
 
-1. **roomi-fields/notebooklm-mcp** — community MCP server (free, runs on your machine).
-2. **Official NotebookLM Enterprise** — Google Workspace Enterprise with API access.
+> Caveat: because it's unofficial, it can break when Google changes their site,
+> and the login expires periodically (re-run `notebooklm login` to fix).
 
-The `.mcp.json` in this repo registers the community server for Claude Code. It
-points at `${NOTEBOOKLM_MCP_PATH}/dist/index.js`, so you set one env var to the
-folder where you cloned the server (see below).
+The `.mcp.json` in this repo registers the server for Claude Code. Note it
+installs from **git**, not PyPI — the MCP server (`notebooklm-mcp`) only exists
+in the GitHub `main` branch, not in any published release (latest PyPI is 0.7.2
+and does not include it).
 
 ---
 
-## 1. Install roomi-fields/notebooklm-mcp (on your own machine)
+## Setup (macOS — what was actually verified)
 
-> This must run wherever you run Claude (Desktop / Code / IDE). It cannot be
-> installed from the ephemeral cloud session — Claude reaches the server over
-> stdio on your local machine.
-
-### Fastest path — Claude Code plugin marketplace
+### 1. Install `uv`
 ```bash
-/plugin marketplace add roomi-fields/claude-plugins
-/plugin install notebooklm@roomi-fields
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
-This registers and runs the server automatically; you can skip the manual steps
-below and the `.mcp.json` in this repo.
+Reopen Terminal afterward.
 
-### Manual path
+### 2. Sign in to NotebookLM
 ```bash
-git clone https://github.com/roomi-fields/notebooklm-mcp.git
-cd notebooklm-mcp
-npm install && npm run build
-
-# one-time Google sign-in for NotebookLM (opens a browser)
-npm run setup-auth
+uv tool install "notebooklm-py[browser]"
+notebooklm login          # opens a browser; sign into the Google account with your notebooks
+```
+Verify auth and list notebooks:
+```bash
+notebooklm auth check --test
+notebooklm list
 ```
 
-Then point this repo's config at that clone:
+### 3. Confirm the MCP server runs (from git)
 ```bash
-export NOTEBOOKLM_MCP_PATH=/absolute/path/to/notebooklm-mcp   # add to your shell profile
+uvx --from "notebooklm-py[mcp] @ git+https://github.com/teng-lin/notebooklm-py" notebooklm-mcp --help
 ```
+This must print usage text. (Plain `notebooklm-py[mcp]` from PyPI will fail with
+`executable named notebooklm-mcp is not provided` — that's why the git URL is
+required.)
 
-Optional local REST API (port 3000) for n8n / Zapier / Make:
-```bash
-npm run start:http
-```
+### 4. Register with your Claude client
 
-### Register with your Claude client
-
-- **Claude Code (this repo):** already done via `.mcp.json`. Restart Claude Code;
-  approve the server when prompted. Verify with `/mcp`.
-- **Claude Desktop:** add to `claude_desktop_config.json`:
-  ```json
-  {
-    "mcpServers": {
-      "notebooklm": {
-        "command": "node",
-        "args": ["/absolute/path/to/notebooklm-mcp/dist/index.js"]
-      }
+**Claude Desktop** — edit `~/Library/Application Support/Claude/claude_desktop_config.json`
+and add the `notebooklm` entry inside `mcpServers` (keep any existing keys; mind
+the commas). Use the **absolute path** to `uvx` (find it with `which uvx`,
+e.g. `/Users/<you>/.local/bin/uvx`) — Claude Desktop on macOS does not inherit
+your shell PATH:
+```json
+{
+  "mcpServers": {
+    "notebooklm": {
+      "command": "/Users/<you>/.local/bin/uvx",
+      "args": [
+        "--from",
+        "notebooklm-py[mcp] @ git+https://github.com/teng-lin/notebooklm-py",
+        "notebooklm-mcp"
+      ]
     }
   }
-  ```
-  Restart Claude Desktop.
+}
+```
+Then **fully quit (Cmd+Q) and reopen** Claude Desktop. The `notebooklm` server
+should show as connected under the tools/🔌 menu.
 
-Check `.env.example` in the cloned repo for optional settings (multi-account
-rotation, audio/video generation). Config docs:
-https://roomi-fields.github.io/notebooklm-mcp/02-configuration
+**Claude Code** — this repo's `.mcp.json` already registers it. Restart Claude
+Code, approve the server, and verify with `/mcp`.
+
+### 5. Use it
+Ask Claude:
+- "List my NotebookLM notebooks"
+- "Ask my <notebook> notebook: <question>"
+- "Summarize the sources in <notebook>"
 
 ---
 
-## 2. Official NotebookLM Enterprise path
+## Troubleshooting
 
-This is an account/admin action — there is nothing to install in code. Steps,
-which require Google Workspace **admin** access:
+| Symptom | Fix |
+| --- | --- |
+| Server shows **failed** in Claude | Check "View Logs" in Developer settings. |
+| `executable named notebooklm-mcp is not provided` | You're on the PyPI build — use the `@ git+...` install above. |
+| `spawn uvx ENOENT` / not found | Use the absolute path to `uvx` in `command` (`which uvx`). |
+| Auth errors / was working, now failed | Re-run `notebooklm login`, then quit/reopen Claude. |
 
-1. **Confirm licensing.** NotebookLM Enterprise (a.k.a. via Agentspace / Gemini
-   Enterprise) requires a Google Workspace Enterprise plan with NotebookLM
-   Enterprise enabled. Check at https://workspace.google.com and your billing.
-2. **Enable in Admin console.** admin.google.com → Apps → turn on NotebookLM
-   Enterprise for the relevant org units.
-3. **Enable API access.** In Google Cloud Console, enable the NotebookLM
-   Enterprise API on the project tied to your Workspace, and create
-   credentials (service account or OAuth) with the required scopes.
-4. **Connect via MCP.** Use Google's official Enterprise MCP endpoint with those
-   credentials, or configure the community server above to use the Enterprise
-   account. Add the endpoint/credentials as env vars rather than committing them.
-
-> ⚠️ Do not commit any tokens, service-account keys, or client secrets to this
-> repo. Keep them in your local environment or a secrets manager.
-
-Reference: https://github.com/roomi-fields/notebooklm-mcp
+> Don't commit any auth state or tokens. Login lives in
+> `~/.notebooklm/profiles/` on your machine, not in this repo.
