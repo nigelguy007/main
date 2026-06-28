@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "notebooklm": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "notebooklm-py[mcp] @ git+https://github.com/teng-lin/notebooklm-py",
+        "notebooklm-mcp"
+      ]
+    }
+  }
+}
